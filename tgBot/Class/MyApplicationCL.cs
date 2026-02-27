@@ -100,19 +100,14 @@ namespace boots.Class
                         Program.SetUserStatus(chatId, "None");
                         return;
                     }
-
-                    // 4. Формируем красивое сообщение
                     var message = new StringBuilder();
                     message.AppendLine($"📋 **Ваши записи ({tekuApplications.Count}):**\n");
 
                     foreach (var application in tekuApplications)
                     {
-                        // Получаем информацию об услуге
                         var typeWork = ManickEntities3.Context().TypeWork
                             .AsNoTracking()
                             .FirstOrDefault(t => t.id_TypeWork == application.id_TypeWork);
-
-                        // Получаем информацию о времени
                         var window = ManickEntities3.Context().Window
                             .AsNoTracking()
                             .FirstOrDefault(w => w.id_Window == application.id_Window);
@@ -145,7 +140,7 @@ namespace boots.Class
                 }
                 else
                 {
-                    if (tekuApplications.Any())
+                    if (tekuApplications.Where(t=>t.Status=="Ожидание").Any())
                     {
                         var keyboardButtons = new List<KeyboardButton[]>();
                         foreach (var app in tekuApplications)

@@ -71,11 +71,8 @@ namespace boots
 
             try
             {
-                // 1. Проверяем что есть сообщение
                 var msg = update?.Message;
                 if (msg == null) return;
-
-                // 2. Проверяем что есть отправитель
                 var user = msg.From;
                 if (user == null) return;
 
