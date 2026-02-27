@@ -27,7 +27,7 @@ namespace boots
             var client = new TelegramBotClient("7607335451:AAETpK5iPliKKvJG8-ZSqik6rwUSfuEcfaM");
             client.StartReceiving(Update, Error);
             Console.WriteLine("Бот запущен!");
-            Console.ReadLine();
+            Task.Delay(-1).GetAwaiter().GetResult();
 
         }
 
