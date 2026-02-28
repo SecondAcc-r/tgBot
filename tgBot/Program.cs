@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -68,6 +69,86 @@ namespace boots
 
         async static Task Update(ITelegramBotClient bot, Update update, CancellationToken token)
         {
+
+            if (update.CallbackQuery != null)
+            {
+                var query = update.CallbackQuery;
+                var data = query.Data;
+                var chatId = query.Message.Chat.Id;
+                var messageId = query.Message.MessageId;
+
+                // --- НОВАЯ ЛОГИКА: ОБРАБОТКА ОПЛАТЫ ---
+                if (data.StartsWith("pay_"))
+                {
+                    // Сначала убираем кружок загрузки у пользователя
+                    await bot.AnswerCallbackQuery(query.Id, "Генерирую ссылку на оплату...");
+
+                    // Извлекаем ID заявки
+                    if (int.TryParse(data.Replace("pay_", ""), out int appId))
+                    {
+                        try
+                        {
+                            // 1. Находим заявку в базе, чтобы узнать сумму и проверить статус
+                            using (var db = new ManickEntities3())
+                            {
+                                var app = db.Application.FirstOrDefault(a => a.id_Application == appId);
+
+                                if (app == null)
+                                {
+                                    await bot.SendMessage(chatId, "❌ Заявка не найдена.");
+                                    return;
+                                }
+
+                                if (app.Status == "Подтверждено" || app.Status == "Оплачено")
+                                {
+                                    await bot.SendMessage(chatId, "ℹ️ Эта запись уже оплачена!");
+                                    return;
+                                }
+
+                                // 2. Вызываем наш класс оплаты
+                                var paymentService = new tgBot.Class.PaymentService();
+
+                                string link = await paymentService.CreatePaymentLinkAsync(
+                                    amount: (decimal)app.FactPrice,
+                                    description: $"Оплата записи #{app.id_Application}",
+                                    orderId: app.id_Application
+                                );
+
+                                // 3. Редактируем сообщение: меняем текст и добавляем ссылку-кнопку
+                                var urlKeyboard = new InlineKeyboardMarkup(new[]
+                                {
+                        new[] { InlineKeyboardButton.WithUrl("🔗 Перейти к оплате", link) }
+                    });
+
+                                await bot.EditMessageText(
+                                    chatId,
+                                    messageId,
+                                    $"💳 **Оплата заказа #{app.id_Application}**\n\n" +
+                                    $"Сумма: **{app.FactPrice} руб.**\n" +
+                                    $"Нажмите кнопку ниже, чтобы перейти на безопасную страницу оплаты ЮKassa.",
+                                    parseMode: ParseMode.Markdown,
+                                    replyMarkup: urlKeyboard
+                                );
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Ошибка оплаты: {ex.Message}");
+                            await bot.SendMessage(chatId, $"❌ Не удалось создать платеж: {ex.Message}. Попробуйте позже.");
+                        }
+                    }
+                    return; // Важно выйти, чтобы код ниже не выполнялся
+                }
+
+                // ... тут могут быть другие проверки (complete_, enroll_ и т.д.) ...
+
+                // Если кнопка не наша, просто снимаем нагрузку
+                await bot.AnswerCallbackQuery(query.Id);
+            }
+
+
+
+
 
             try
             {

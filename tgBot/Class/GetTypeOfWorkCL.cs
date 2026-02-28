@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
 namespace boots.Class
@@ -151,7 +152,7 @@ namespace boots.Class
                     // Создаем заявку
                     var application = new Application()
                     {
-                        Status = "Ожидание",
+                        Status = "Ожидание оплаты",
                         id_Window = userApp.IdWindow,
                         FactPrice = type.BasePrice,
                         id_Client = userApp.IdClient,
@@ -169,7 +170,27 @@ namespace boots.Class
 
                     Console.WriteLine($"SUCCESS: Application created with ID: {application.id_Application}");
 
-                    await bot.SendMessage(chatId, $"✅ Запись оформлена! Номер: #{application.id_Application}");
+                    string messageText = $"✅ Запись оформлена!\n" +
+                     $"Номер заказа: #{application.id_Application}\n" +
+                     $"Сумма к оплате: **{application.FactPrice} руб.**\n\n" +
+                     $"Нажмите кнопку ниже, чтобы оплатить и подтвердить запись:";
+
+                    // 2. Создаем кнопку с CallbackData
+                    // В data мы передаем префикс "pay_" и ID заявки, чтобы потом понять, что оплачивать
+                    var payButton = new InlineKeyboardButton("💳 Оплатить заказ")
+                    {
+                        CallbackData = $"pay_{application.id_Application}"
+                    };
+
+                    var keyboard = new InlineKeyboardMarkup(new[] { new[] { payButton } });
+
+                    // 3. Отправляем сообщение с кнопкой
+                    await bot.SendMessage(
+                        chatId,
+                        messageText,
+                        parseMode: ParseMode.Markdown,
+                        replyMarkup: keyboard
+                    );
                     return true;
                 }
             }
