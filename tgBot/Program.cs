@@ -20,6 +20,7 @@ namespace boots
 {
     class Program
     {
+        public static ITelegramBotClient BotInstance;
         public static Dictionary<long, string> userStatuses = new Dictionary<long, string>();
         public static Dictionary<long, ClientCL> userClients = new Dictionary<long, ClientCL>();
         public static Dictionary<long, ApplicationCl> applica = new Dictionary<long, ApplicationCl>();
@@ -28,7 +29,7 @@ namespace boots
             Console.WriteLine("🚀 Запуск бота + Webhook сервер...");
 
             // 2. Инициализируем ГЛОБАЛЬНУЮ переменную
-            var BotInstance = new TelegramBotClient("7607335451:AAETpK5iPliKKvJG8-ZSqik6rwUSfuEcfaM");
+             BotInstance = new TelegramBotClient("7607335451:AAETpK5iPliKKvJG8-ZSqik6rwUSfuEcfaM");
 
             using var cts = new CancellationTokenSource();
 
@@ -63,63 +64,81 @@ namespace boots
         {
             try
             {
-                // Читаем тело запроса (JSON от ЮKassa)
+                context.Request.EnableBuffering();
                 using var reader = new System.IO.StreamReader(context.Request.Body);
                 var json = await reader.ReadToEndAsync();
 
                 Console.WriteLine($"🔔 Получен Webhook: {json}");
 
-                // Парсим JSON (простой способ без лишних библиотек)
                 using var doc = System.Text.Json.JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
-                // Проверяем тип события
                 var eventType = root.GetProperty("event").GetString();
 
                 if (eventType == "payment.succeeded")
                 {
-                    // Платеж успешен!
-                    var metadata = root.GetProperty("object").GetProperty("metadata");
+                    var paymentObject = root.GetProperty("object");
+                    var metadata = paymentObject.GetProperty("metadata");
 
-                    if (metadata.TryGetProperty("order_id", out var orderIdProp))
+                    // ПРАВИЛЬНОЕ ПОЛУЧЕНИЕ ORDER_ID
+                    // Сразу получаем элемент, без лишнего TryGetProperty с объявлением переменной внутри if
+                    if (metadata.TryGetProperty("order_id", out var orderIdElement))
                     {
-                        int orderId = orderIdProp.GetInt32();
-                        Console.WriteLine($"💰 Оплата прошла для заявки #{orderId}");
+                        string orderIdStr = "";
 
-                        // МЕНЯЕМ СТАТУС В БАЗЕ
-                        using (var db = new ManickEntities3())
+                        // Проверяем тип данных (строка или число)
+                        if (orderIdElement.ValueKind == System.Text.Json.JsonValueKind.String)
                         {
-                            var app = db.Application.FirstOrDefault(a => a.id_Application == orderId);
-                            if (app != null)
+                            orderIdStr = orderIdElement.GetString();
+                        }
+                        else
+                        {
+                            // Если число, берем его
+                            orderIdStr = orderIdElement.GetInt32().ToString();
+                        }
+
+                        // Пытаемся преобразовать в int
+                        if (int.TryParse(orderIdStr, out int orderId))
+                        {
+                            Console.WriteLine($"💰 Оплата прошла для заявки #{orderId}");
+
+                            using (var db = new ManickEntities3())
                             {
-                                app.Status = "Подтверждено"; // Или "Оплачено"
-                                db.SaveChanges();
+                                var appEntity = db.Application.FirstOrDefault(a => a.id_Application == orderId);
 
-                                // Уведомляем клиента
-                                // Нам нужно знать chatId клиента. 
-                                // Вариант А: Сохранить chatId в базе при создании заявки (рекомендую!)
-                                // Вариант Б: Найти клиента по ID и взять его chatId (если есть связь)
+                                if (appEntity != null)
+                                {
+                                    appEntity.Status = "Подтверждено";
+                                    db.SaveChanges();
+                                    Console.WriteLine($"✅ Статус заявки #{orderId} изменен на 'Подтверждено'!");
 
-                                // Пример (предполагаем, что у тебя в Application есть поле Client или id_Client, а в Client нет chatId)
-                                // ЛУЧШЕ: При создании заявки сохрани chatId прямо в Application в поле TelegramChatId (добавь его в БД)
-
-                                // Если поля chatId в заявке нет, придется искать через клиента, если там есть telegram_id
-                                // Для примера предположим, что мы можем найти chatId:
-                                // long chatId = ...; 
-                                // await bot.SendMessage(chatId, "✅ Оплата прошла! Вы записаны.");
-
-                                Console.WriteLine($"Статус заявки #{orderId} изменен на 'Подтверждено'");
+                                    // Отправка сообщения клиенту (если есть ChatId)
+                                    
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"❌ Заявка #{orderId} НЕ НАЙДЕНА в базе данных!");
+                                }
                             }
                         }
+                        else
+                        {
+                            Console.WriteLine($"❌ Не удалось преобразовать ID '{orderIdStr}' в число.");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("❌ В метаданных нет поля 'order_id'.");
                     }
                 }
 
-                context.Response.StatusCode = 200; // Ответ ЮKassa: "Всё ок"
+                context.Response.StatusCode = 200;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"❌ Ошибка обработки вебхука: {ex.Message}");
-                context.Response.StatusCode = 500; // Ошибка
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                context.Response.StatusCode = 500;
             }
         }
 
