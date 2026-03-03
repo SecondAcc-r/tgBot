@@ -1,11 +1,14 @@
 ﻿using boots.Class;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -13,8 +16,6 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using static System.Net.Mime.MediaTypeNames;
-
 namespace boots
 {
     class Program
@@ -22,15 +23,109 @@ namespace boots
         public static Dictionary<long, string> userStatuses = new Dictionary<long, string>();
         public static Dictionary<long, ClientCL> userClients = new Dictionary<long, ClientCL>();
         public static Dictionary<long, ApplicationCl> applica = new Dictionary<long, ApplicationCl>();
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
+            Console.WriteLine("🚀 Запуск бота + Webhook сервер...");
 
-            var client = new TelegramBotClient("7607335451:AAETpK5iPliKKvJG8-ZSqik6rwUSfuEcfaM");
-            client.StartReceiving(Update, Error);
-            Console.WriteLine("Бот запущен!");
-            Task.Delay(-1).GetAwaiter().GetResult();
+            // 2. Инициализируем ГЛОБАЛЬНУЮ переменную
+            var BotInstance = new TelegramBotClient("7607335451:AAETpK5iPliKKvJG8-ZSqik6rwUSfuEcfaM");
 
+            using var cts = new CancellationTokenSource();
+
+            // 3. Запускаем бота
+            _ = Task.Run(() =>
+            {
+                BotInstance.StartReceiving(Update, Error, cancellationToken: cts.Token);
+                Console.WriteLine("✅ Бот запущен (Polling)...");
+            });
+
+            // 4. Создаем Веб-сервер (теперь WebApplication должен быть виден)
+            var builder = WebApplication.CreateBuilder(args);
+
+            builder.WebHost.UseUrls("http://0.0.0.0:5000");
+
+            var app = builder.Build();
+
+            app.MapPost("/api/yookassa-webhook", async (HttpContext context) =>
+            {
+                await HandleYookassaWebhook(context);
+            });
+
+            app.MapGet("/", async () => "Bot is running! Webhook active.");
+
+            Console.WriteLine("🌐 Веб-сервер запущен на http://85.239.34.112:5000");
+
+            await app.RunAsync();
         }
+
+
+        private static async Task HandleYookassaWebhook(HttpContext context)
+        {
+            try
+            {
+                // Читаем тело запроса (JSON от ЮKassa)
+                using var reader = new System.IO.StreamReader(context.Request.Body);
+                var json = await reader.ReadToEndAsync();
+
+                Console.WriteLine($"🔔 Получен Webhook: {json}");
+
+                // Парсим JSON (простой способ без лишних библиотек)
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                // Проверяем тип события
+                var eventType = root.GetProperty("event").GetString();
+
+                if (eventType == "payment.succeeded")
+                {
+                    // Платеж успешен!
+                    var metadata = root.GetProperty("object").GetProperty("metadata");
+
+                    if (metadata.TryGetProperty("order_id", out var orderIdProp))
+                    {
+                        int orderId = orderIdProp.GetInt32();
+                        Console.WriteLine($"💰 Оплата прошла для заявки #{orderId}");
+
+                        // МЕНЯЕМ СТАТУС В БАЗЕ
+                        using (var db = new ManickEntities3())
+                        {
+                            var app = db.Application.FirstOrDefault(a => a.id_Application == orderId);
+                            if (app != null)
+                            {
+                                app.Status = "Подтверждено"; // Или "Оплачено"
+                                db.SaveChanges();
+
+                                // Уведомляем клиента
+                                // Нам нужно знать chatId клиента. 
+                                // Вариант А: Сохранить chatId в базе при создании заявки (рекомендую!)
+                                // Вариант Б: Найти клиента по ID и взять его chatId (если есть связь)
+
+                                // Пример (предполагаем, что у тебя в Application есть поле Client или id_Client, а в Client нет chatId)
+                                // ЛУЧШЕ: При создании заявки сохрани chatId прямо в Application в поле TelegramChatId (добавь его в БД)
+
+                                // Если поля chatId в заявке нет, придется искать через клиента, если там есть telegram_id
+                                // Для примера предположим, что мы можем найти chatId:
+                                // long chatId = ...; 
+                                // await bot.SendMessage(chatId, "✅ Оплата прошла! Вы записаны.");
+
+                                Console.WriteLine($"Статус заявки #{orderId} изменен на 'Подтверждено'");
+                            }
+                        }
+                    }
+                }
+
+                context.Response.StatusCode = 200; // Ответ ЮKassa: "Всё ок"
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка обработки вебхука: {ex.Message}");
+                context.Response.StatusCode = 500; // Ошибка
+            }
+        }
+
+
+
+
 
         private static async Task Error(ITelegramBotClient client, Exception exception, HandleErrorSource source, CancellationToken token)
         {
