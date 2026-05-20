@@ -21,28 +21,20 @@ namespace boots.Class
                 {
                     var user = msg.From;
                     long userId = user.Id;
-
-                    // Преобразуем ID в строку ПЕРЕД запросом к БД
                     string telegramId = userId.ToString();
 
                     Console.WriteLine($"Ищем клиента с Telegram ID: '{telegramId}'");
-
-                    // 1. Получаем ВСЕХ клиентов (для отладки)
                     var allClients = ManickEntities3.Context().Client.ToList();
                     Console.WriteLine($"Всего клиентов в БД: {allClients.Count}");
-
-                    // 2. Находим нашего клиента
                     var tekuUser = ManickEntities3.Context().Client
                         .AsNoTracking()
                         .FirstOrDefault(u => u.idTelegram == telegramId);
-
-                    // Альтернативный способ если не нашли:
                     if (tekuUser == null)
                     {
-                        // Ищем без учета пробелов
+
                         tekuUser = ManickEntities3.Context().Client
                             .AsNoTracking()
-                            .ToList() // Выгружаем в память
+                            .ToList() 
                             .FirstOrDefault(u =>
                                 u.idTelegram != null &&
                                 u.idTelegram.Trim() == telegramId.Trim());
@@ -51,8 +43,6 @@ namespace boots.Class
                     if (tekuUser == null)
                     {
                         Console.WriteLine($"Клиент с Telegram ID '{telegramId}' не найден в БД");
-
-                        // Покажем какие ID есть в БД для отладки
                         var existingIds = allClients
                             .Where(c => !string.IsNullOrEmpty(c.idTelegram))
                             .Select(c => c.idTelegram)
@@ -73,12 +63,10 @@ namespace boots.Class
                     }
 
                     Console.WriteLine($"Найден клиент: ID={tekuUser.id_Client}, Имя={tekuUser.Name}");
-
-                    // 3. Получаем ВСЕ заявки клиента
                     var tekuApplications = ManickEntities3.Context().Application
                         .AsNoTracking()
                         .Where(a => a.id_Client == tekuUser.id_Client)
-                        .OrderByDescending(a => a.id_Application) // Сначала новые
+                        .OrderByDescending(a => a.id_Application) 
                         .ToList();
 
                 if (isDelete == false)
@@ -131,11 +119,7 @@ namespace boots.Class
                     }
 
                     message.AppendLine($"💡 Всего записей: {tekuApplications.Count}");
-
-                    // 5. Отправляем сообщение
                     await bot.SendMessage(msg.Chat.Id, message.ToString());
-
-                    // 6. Меняем статус
                     Program.SetUserStatus(chatId, "None");
                 }
                 else
