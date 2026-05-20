@@ -68,11 +68,7 @@ namespace boots
 
                 if (window != null)
                 {
-                    // Сохраняем в заявку ЭТОГО пользователя
                     userApp.IdWindow = window.id_Window;
-
-                    // Обновляем статус окна
-
                     ManickEntities3.Context().SaveChanges();
 
                     await bot.SendMessage(chatId, $"✅ Время выбрано!\nДата: {window.Date:dd.MM.yyyy}\nВремя: {window.time:hh\\:mm}");
