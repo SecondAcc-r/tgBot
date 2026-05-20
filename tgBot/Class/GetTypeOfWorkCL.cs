@@ -13,7 +13,7 @@ namespace boots.Class
     internal class GetTypeOfWorkCL
     {
 
-        public static async Task GetTypeOfWork(ITelegramBotClient bot, long chatId) // ← возвращаем Task, а не void
+        public static async Task GetTypeOfWork(ITelegramBotClient bot, long chatId) 
         {
             try
             {
@@ -58,13 +58,10 @@ namespace boots.Class
             {
                 using (var context = new ManickEntities3())
                 {
-                    // Получаем текущего пользователя по telegramId для проверки
                     var telegramId = chatId.ToString();
                     var currentClient = context.Client.FirstOrDefault(c => c.idTelegram == telegramId);
 
                     Console.WriteLine($"Client from DB: Id={currentClient?.id_Client}, Telegram={currentClient?.idTelegram}");
-
-                    // Если IdClient в userApp неверный, используем ID из БД
                     if (userApp.IdClient == 0 && currentClient != null)
                     {
                         Console.WriteLine($"Fixing IdClient: {userApp.IdClient} -> {currentClient.id_Client}");
@@ -89,8 +86,7 @@ namespace boots.Class
                         return false;
                     }
 
-                    // ВАЖНО: НЕЛЬЗЯ использовать строковую интерполяцию в LINQ to Entities
-                    // Решение 1: Разбираем строку selectedText
+    
                     var parts = selectedText.Split(new[] { " - " }, StringSplitOptions.None);
                     if (parts.Length != 2)
                     {
@@ -109,13 +105,13 @@ namespace boots.Class
                         return false;
                     }
 
-                    // Ищем тип работы по названию и цене
+            
                     var type = context.TypeWork
                         .FirstOrDefault(w => w.Title == title && w.BasePrice == price);
 
                     if (type == null)
                     {
-                        // Альтернативный поиск: получить все и отфильтровать в памяти
+                
                         var allTypes = context.TypeWork.ToList();
                         type = allTypes.FirstOrDefault(w =>
                             $"{w.Title} - {w.BasePrice} руб." == selectedText);
@@ -129,13 +125,11 @@ namespace boots.Class
                     }
 
                     Console.WriteLine($"Type work found: {type.Title}, Price: {type.BasePrice}, ID: {type.id_TypeWork}");
-
-                    // Проверяем, что клиент существует
                     var client = context.Client.FirstOrDefault(c => c.id_Client == userApp.IdClient);
                     if (client == null)
                     {
                         Console.WriteLine($"ERROR: Client {userApp.IdClient} not found in DB");
-                        // Пытаемся найти клиента по telegramId
+                     
                         client = context.Client.FirstOrDefault(c => c.idTelegram == telegramId);
                         if (client != null)
                         {
@@ -148,8 +142,6 @@ namespace boots.Class
                             return false;
                         }
                     }
-
-                    // Создаем заявку
                     var application = new Application()
                     {
                         Status = "Ожидание оплаты",
@@ -160,11 +152,7 @@ namespace boots.Class
                     };
 
                     Console.WriteLine($"Creating application: ClientId={application.id_Client}, WindowId={application.id_Window}");
-
-                    // Обновляем статус окна
                     window.Status = "Booked";
-
-                    // Сохраняем изменения
                     context.Application.Add(application);
                     context.SaveChanges();
 
@@ -174,17 +162,12 @@ namespace boots.Class
                      $"Номер заказа: #{application.id_Application}\n" +
                      $"Сумма к оплате: **{application.FactPrice} руб.**\n\n" +
                      $"Нажмите кнопку ниже, чтобы оплатить и подтвердить запись:";
-
-                    // 2. Создаем кнопку с CallbackData
-                    // В data мы передаем префикс "pay_" и ID заявки, чтобы потом понять, что оплачивать
                     var payButton = new InlineKeyboardButton("💳 Оплатить заказ")
                     {
                         CallbackData = $"pay_{application.id_Application}"
                     };
 
                     var keyboard = new InlineKeyboardMarkup(new[] { new[] { payButton } });
-
-                    // 3. Отправляем сообщение с кнопкой
                     await bot.SendMessage(
                         chatId,
                         messageText,
@@ -208,7 +191,7 @@ namespace boots.Class
                 return false;
             }
         }
-        public static async Task ShowTypeOfWork(ITelegramBotClient bot, long chatId) // ← возвращаем Task, а не void
+        public static async Task ShowTypeOfWork(ITelegramBotClient bot, long chatId) 
         {
             try
             {
